@@ -11,6 +11,12 @@ export function getScriptNameForDelete(
 	args: { name: string | undefined; script?: string | undefined },
 	config: Config
 ): string | undefined {
+	// If positional script argument is provided, always return undefined
+	// This will trigger the warning regardless of --name or config.name
+	if (args.script) {
+		return undefined;
+	}
+
 	// If --name is provided, use that
 	if (args.name) {
 		return args.name;
@@ -19,12 +25,6 @@ export function getScriptNameForDelete(
 	// If name is in config, use that
 	if (config.name) {
 		return config.name;
-	}
-
-	// If no main entry point is configured and a positional argument (script) is provided,
-	// treat it as the worker name
-	if (!config.main && args.script) {
-		return args.script;
 	}
 
 	return undefined;
