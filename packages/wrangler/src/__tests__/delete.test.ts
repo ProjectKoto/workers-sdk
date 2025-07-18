@@ -240,6 +240,108 @@ describe("delete", () => {
 		`
 		);
 	});
+	describe("positional arguments", () => {
+		it("should delete a worker using positional argument when no main entry point", async () => {
+			mockConfirm({
+				text: `Are you sure you want to delete pos-worker? This action cannot be undone.`,
+				result: true,
+			});
+			// Write config with no main entry point
+			writeWranglerConfig({ name: undefined, main: undefined });
+			mockListKVNamespacesRequest();
+			mockListReferencesRequest("pos-worker");
+			mockListTailsByConsumerRequest("pos-worker");
+			mockDeleteWorkerRequest({ name: "pos-worker" });
+			await runWrangler("delete pos-worker");
+
+			expect(std).toMatchInlineSnapshot(`
+			Object {
+			  "debug": "",
+			  "err": "",
+			  "info": "",
+			  "out": "Successfully deleted pos-worker",
+			  "warn": "",
+			}
+		`);
+		});
+
+		it("should NOT use positional argument when main entry point exists", async () => {
+			// Write config with main entry point
+			writeWranglerConfig({ name: undefined, main: "src/index.js" });
+			await expect(
+				runWrangler("delete pos-worker")
+			).rejects.toThrowErrorMatchingInlineSnapshot(
+				`[Error: It looks like you are trying to delete worker with name "pos-worker". Worker name must be defined either via --name or in your wrangler.toml file]`
+			);
+		});
+
+		it("should prioritize --name over positional argument", async () => {
+			mockConfirm({
+				text: `Are you sure you want to delete flag-worker? This action cannot be undone.`,
+				result: true,
+			});
+			// Write config with no main entry point
+			writeWranglerConfig({ name: undefined, main: undefined });
+			mockListKVNamespacesRequest();
+			mockListReferencesRequest("flag-worker");
+			mockListTailsByConsumerRequest("flag-worker");
+			mockDeleteWorkerRequest({ name: "flag-worker" });
+			await runWrangler("delete --name flag-worker pos-worker");
+
+			expect(std).toMatchInlineSnapshot(`
+			Object {
+			  "debug": "",
+			  "err": "",
+			  "info": "",
+			  "out": "Successfully deleted flag-worker",
+			  "warn": "",
+			}
+		`);
+		});
+
+		it("should prioritize config name over positional argument", async () => {
+			mockConfirm({
+				text: `Are you sure you want to delete config-worker? This action cannot be undone.`,
+				result: true,
+			});
+			// Write config with name but no main entry point
+			writeWranglerConfig({ name: "config-worker", main: undefined });
+			mockListKVNamespacesRequest();
+			mockListReferencesRequest("config-worker");
+			mockListTailsByConsumerRequest("config-worker");
+			mockDeleteWorkerRequest({ name: "config-worker" });
+			await runWrangler("delete pos-worker");
+
+			expect(std).toMatchInlineSnapshot(`
+			Object {
+			  "debug": "",
+			  "err": "",
+			  "info": "",
+			  "out": "Successfully deleted config-worker",
+			  "warn": "",
+			}
+		`);
+		});
+
+		it("should show helpful error when positional argument provided but main exists", async () => {
+			writeWranglerConfig({ name: undefined, main: "src/index.js" });
+			await expect(
+				runWrangler("delete my-worker")
+			).rejects.toThrowErrorMatchingInlineSnapshot(
+				`[Error: It looks like you are trying to delete worker with name "my-worker". Worker name must be defined either via --name or in your wrangler.toml file]`
+			);
+		});
+
+		it("should show default error when no positional argument and no config", async () => {
+			writeWranglerConfig({ name: undefined, main: undefined });
+			await expect(
+				runWrangler("delete")
+			).rejects.toThrowErrorMatchingInlineSnapshot(
+				`[Error: A worker name must be defined, either via --name, or in your wrangler.toml file]`
+			);
+		});
+	});
+
 	describe("force deletes", () => {
 		it("should prompt for extra confirmation when service is depended on and use force", async () => {
 			mockConfirm({

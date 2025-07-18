@@ -8,7 +8,7 @@ import { deleteKVNamespace, listKVNamespaces } from "./kv/helpers";
 import { logger } from "./logger";
 import * as metrics from "./metrics";
 import { requireAuth } from "./user";
-import { getScriptName } from "./utils/getScriptName";
+import { getScriptNameForDelete } from "./utils/getScriptName";
 import type { ComplianceConfig } from "./environment-variables/misc-variables";
 
 // Types returned by the /script/{name}/references API
@@ -107,10 +107,14 @@ export const deleteCommand = createCommand({
 
 		const accountId = args.dryRun ? undefined : await requireAuth(config);
 
-		const scriptName = getScriptName(args, config);
+		const scriptName = getScriptNameForDelete(args, config);
 		if (!scriptName) {
+			const errorMessage = args.script 
+				? `It looks like you are trying to delete worker with name "${args.script}". Worker name must be defined either via --name or in your ${configFileName(config.configPath)} file`
+				: `A worker name must be defined, either via --name, or in your ${configFileName(config.configPath)} file`;
+			
 			throw new UserError(
-				`A worker name must be defined, either via --name, or in your ${configFileName(config.configPath)} file`,
+				errorMessage,
 				{
 					telemetryMessage:
 						"`A worker name must be defined, either via --name, or in your config file",
