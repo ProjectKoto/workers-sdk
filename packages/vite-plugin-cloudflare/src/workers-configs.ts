@@ -334,17 +334,12 @@ export function getWorkerConfig(
 	let main = config.main;
 
 	if (hasAllowedExtension(main)) {
+		// Resolve `main` to an absolute path
 		main = path.resolve(path.dirname(configPath), main);
-		const mainStat = fs.statSync(main, { throwIfNoEntry: false });
 
-		if (!mainStat) {
+		if (!fs.existsSync(main)) {
 			throw new Error(
 				`The provided Wrangler config main field (${main}) doesn't point to an existing file`
-			);
-		}
-		if (mainStat.isDirectory()) {
-			throw new Error(
-				`The provided Wrangler config main field (${main}) points to a directory, it needs to point to a file instead`
 			);
 		}
 	}
