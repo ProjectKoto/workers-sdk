@@ -18,6 +18,12 @@ export async function fetch(
 	const requestInit = init as RequestInit;
 	const request = new Request(input, requestInit);
 
+	if (requestInit && requestInit.dispatcher && (requestInit.dispatcher instanceof undici.ProxyAgent)) {
+		console.log("using proxy for miniflare fetch3", request.url);
+	} else {
+		console.log("miniflare fetch3", request.url);
+	}
+
 	// Handle WebSocket upgrades
 	if (
 		request.method === "GET" &&

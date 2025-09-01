@@ -14,6 +14,7 @@ import { z } from "zod";
 import { fetch } from "../../http";
 import {
 	Extension,
+	HttpOptions_Style,
 	kVoid,
 	Service,
 	ServiceDesignator,
@@ -72,6 +73,7 @@ import {
 	ServiceDesignatorSchema,
 } from "./services";
 import type { WorkerRegistry } from "../../shared/dev-registry";
+import * as undici from "undici";
 
 // `workerd`'s `trustBrowserCas` should probably be named `trustSystemCas`.
 // Rather than using a bundled CA store like Node, it uses
@@ -197,6 +199,8 @@ export const CoreOptionsSchema = CoreOptionsSchemaInput.transform((value) => {
 		// This allows us to validate the options and then feed them into Miniflare without issue.
 		value.fetchMock = undefined;
 		value.outboundService = (req) => fetch(req, { dispatcher: fetchMock });
+	} else if (process.env.HTTP_PROXY) {
+		value.outboundService = (req) => fetch(req, { dispatcher: new undici.ProxyAgent(process.env.HTTP_PROXY!) });
 	}
 	return value;
 });
