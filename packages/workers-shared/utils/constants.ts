@@ -23,8 +23,11 @@ export const ENTRY_SIZE = PATH_HASH_SIZE + CONTENT_HASH_SIZE + TAIL_SIZE;
 
 // -- Manifest creation constants --
 // used in wrangler dev and deploy
-/** Maximum number of assets that can be deployed with a worker */
-export const MAX_ASSET_COUNT = 20_000;
+/**
+ * Maximum number of assets that can be deployed with a worker; this is a global
+ * ceiling, and may vary by the user's subscription.
+ */
+export const MAX_ASSET_COUNT = 100_000;
 /** Maximum size per asset that can be deployed with a worker */
 export const MAX_ASSET_SIZE = 25 * 1024 * 1024;
 
