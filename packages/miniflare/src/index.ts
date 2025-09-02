@@ -331,63 +331,114 @@ function getDurableObjectClassNames(
 	allWorkerOpts: PluginWorkerOptions[]
 ): DurableObjectClassNames {
 	const serviceClassNames: DurableObjectClassNames = new Map();
-	for (const workerOpts of allWorkerOpts) {
-		const workerServiceName = getUserServiceName(workerOpts.core.name);
-		for (const designator of Object.values(
-			workerOpts.do.durableObjects ?? {}
-		)) {
-			const {
-				className,
-				// Fallback to current worker service if name not defined
-				serviceName = workerServiceName,
-				enableSql,
-				unsafeUniqueKey,
-				unsafePreventEviction,
+
+	const allDurableObjects = allWorkerOpts
+		.flatMap((workerOpts) => {
+			const workerServiceName = getUserServiceName(workerOpts.core.name);
+
+			return Object.values(workerOpts.do.durableObjects ?? {}).map(
+				(workerDODesignator) => {
+					const doInfo = normaliseDurableObject(workerDODesignator);
+					if (doInfo.serviceName === undefined) {
+						// Fallback to current worker service if name not defined
+						doInfo.serviceName = workerServiceName;
+					}
+					return {
+						doInfo,
+						workerRawName: workerOpts.core.name,
+					};
+				}
+			);
+		})
+		// We sort the list of durable objects because we want the durable objects without a scriptName or a scriptName
+		// that matches the raw worker's name (meaning that they are defined within their worker) to be processed first
+		.sort(({ doInfo, workerRawName }) =>
+			doInfo.scriptName === undefined || doInfo.scriptName === workerRawName
+				? -1
+				: 0
+		)
+		.map(({ doInfo }) => doInfo);
+
+	for (const doInfo of allDurableObjects) {
+		const { className, serviceName, container, ...doConfigs } = doInfo;
+		// We know that the service name is always defined (since if it is not we do default it to the current worker service)
+		assert(serviceName);
+		// Get or create `Map` mapping class name to optional unsafe unique key
+		let classNames = serviceClassNames.get(serviceName);
+		if (classNames === undefined) {
+			classNames = new Map();
+			serviceClassNames.set(serviceName, classNames);
+		}
+
+		if (classNames.has(className)) {
+			// If we've already seen this class in this service, make sure the
+			// unsafe unique keys and unsafe prevent eviction values match
+			const existingInfo = classNames.get(className);
+
+			const isDoUnacceptableDiff = (
+				field: Extract<
+					keyof typeof doConfigs,
+					"enableSql" | "unsafeUniqueKey" | "unsafePreventEviction"
+				>
+			) => {
+				if (!existingInfo) {
+					return false;
+				}
+
+				const same = existingInfo[field] === doConfigs[field];
+				if (same) {
+					return false;
+				}
+
+				const oneIsUndefined =
+					existingInfo[field] === undefined || doConfigs[field] === undefined;
+
+				// If one of the configurations is `undefined` (either the current one or the existing one) then there we
+				// want to consider this as an acceptable difference since we might be in a potentially valid situation in
+				// which worker A defines a DO with a config, while worker B simply uses the DO from worker A but without
+				// providing the configuration (thus leaving it `undefined`) (this for example is exactly what Wrangler does
+				// with the implicitly defined `enableSql` flag)
+				if (oneIsUndefined) {
+					return false;
+				}
+
+				return true;
+			};
+
+			if (isDoUnacceptableDiff("enableSql")) {
+				throw new MiniflareCoreError(
+					"ERR_DIFFERENT_STORAGE_BACKEND",
+					`Different storage backends defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
+						doConfigs.enableSql
+					)} and ${JSON.stringify(existingInfo?.enableSql)}`
+				);
+			}
+
+			if (isDoUnacceptableDiff("unsafeUniqueKey")) {
+				throw new MiniflareCoreError(
+					"ERR_DIFFERENT_UNIQUE_KEYS",
+					`Multiple unsafe unique keys defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
+						doConfigs.unsafeUniqueKey
+					)} and ${JSON.stringify(existingInfo?.unsafeUniqueKey)}`
+				);
+			}
+
+			if (isDoUnacceptableDiff("unsafePreventEviction")) {
+				throw new MiniflareCoreError(
+					"ERR_DIFFERENT_PREVENT_EVICTION",
+					`Multiple unsafe prevent eviction values defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
+						doConfigs.unsafePreventEviction
+					)} and ${JSON.stringify(existingInfo?.unsafePreventEviction)}`
+				);
+			}
+		} else {
+			// Otherwise, just add it
+			classNames.set(className, {
+				enableSql: doConfigs.enableSql,
+				unsafeUniqueKey: doConfigs.unsafeUniqueKey,
+				unsafePreventEviction: doConfigs.unsafePreventEviction,
 				container,
-			} = normaliseDurableObject(designator);
-			// Get or create `Map` mapping class name to optional unsafe unique key
-			let classNames = serviceClassNames.get(serviceName);
-			if (classNames === undefined) {
-				classNames = new Map();
-				serviceClassNames.set(serviceName, classNames);
-			}
-			if (classNames.has(className)) {
-				// If we've already seen this class in this service, make sure the
-				// unsafe unique keys and unsafe prevent eviction values match
-				const existingInfo = classNames.get(className);
-				if (existingInfo?.enableSql !== enableSql) {
-					throw new MiniflareCoreError(
-						"ERR_DIFFERENT_STORAGE_BACKEND",
-						`Different storage backends defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
-							enableSql
-						)} and ${JSON.stringify(existingInfo?.enableSql)}`
-					);
-				}
-				if (existingInfo?.unsafeUniqueKey !== unsafeUniqueKey) {
-					throw new MiniflareCoreError(
-						"ERR_DIFFERENT_UNIQUE_KEYS",
-						`Multiple unsafe unique keys defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
-							unsafeUniqueKey
-						)} and ${JSON.stringify(existingInfo?.unsafeUniqueKey)}`
-					);
-				}
-				if (existingInfo?.unsafePreventEviction !== unsafePreventEviction) {
-					throw new MiniflareCoreError(
-						"ERR_DIFFERENT_PREVENT_EVICTION",
-						`Multiple unsafe prevent eviction values defined for Durable Object "${className}" in "${serviceName}": ${JSON.stringify(
-							unsafePreventEviction
-						)} and ${JSON.stringify(existingInfo?.unsafePreventEviction)}`
-					);
-				}
-			} else {
-				// Otherwise, just add it
-				classNames.set(className, {
-					enableSql,
-					unsafeUniqueKey,
-					unsafePreventEviction,
-					container,
-				});
-			}
+			});
 		}
 	}
 	return serviceClassNames;
@@ -848,7 +899,7 @@ export class Miniflare {
 	#workerOpts: PluginWorkerOptions[];
 	#log: Log;
 
-	// key is the browser wsEndpoint, value is the browser process
+	// key is the browser session ID, value is the browser process
 	#browserProcesses: Map<string, Process> = new Map();
 
 	readonly #runtime?: Runtime;
@@ -1180,32 +1231,31 @@ export class Miniflare {
 				this.#log.logWithLevel(logLevel, message);
 				response = new Response(null, { status: 204 });
 			} else if (url.pathname === "/browser/launch") {
-				const { browserProcess, wsEndpoint } = await launchBrowser({
-					// Puppeteer v22.8.2 supported chrome version:
-					// https://pptr.dev/supported-browsers#supported-browser-version-list
-					//
-					// It should match the supported chrome version for the upstream puppeteer
-					// version from which @cloudflare/puppeteer branched off, which is specified in:
-					// https://github.com/cloudflare/puppeteer/tree/v1.0.2?tab=readme-ov-file#workers-version-of-puppeteer-core
-					browserVersion: "124.0.6367.207",
-					log: this.#log,
-					tmpPath: this.#tmpPath,
-				});
+				const { sessionId, browserProcess, startTime, wsEndpoint } =
+					await launchBrowser({
+						// Puppeteer v22.8.2 supported chrome version:
+						// https://pptr.dev/supported-browsers#supported-browser-version-list
+						//
+						// It should match the supported chrome version for the upstream puppeteer
+						// version from which @cloudflare/puppeteer branched off, which is specified in:
+						// https://github.com/cloudflare/puppeteer/tree/v1.0.2?tab=readme-ov-file#workers-version-of-puppeteer-core
+						browserVersion: "124.0.6367.207",
+						log: this.#log,
+						tmpPath: this.#tmpPath,
+					});
 				browserProcess.nodeProcess.on("exit", () => {
-					this.#browserProcesses.delete(wsEndpoint);
+					this.#browserProcesses.delete(sessionId);
 				});
-				this.#browserProcesses.set(wsEndpoint, browserProcess);
-				response = new Response(wsEndpoint);
+				this.#browserProcesses.set(sessionId, browserProcess);
+				response = Response.json({ wsEndpoint, sessionId, startTime });
 			} else if (url.pathname === "/browser/status") {
-				const wsEndpoint = url.searchParams.get("wsEndpoint");
-				assert(wsEndpoint !== null, "Missing wsEndpoint query parameter");
-				const process = this.#browserProcesses.get(wsEndpoint);
-				const status = {
-					stopped: !process,
-				};
-				response = new Response(JSON.stringify(status), {
-					headers: { "Content-Type": "application/json" },
-				});
+				const sessionId = url.searchParams.get("sessionId");
+				assert(sessionId !== null, "Missing sessionId query parameter");
+				const process = this.#browserProcesses.get(sessionId);
+				response = new Response(null, { status: process ? 200 : 410 });
+			} else if (url.pathname === "/browser/sessionIds") {
+				const sessionIds = this.#browserProcesses.keys();
+				response = Response.json(Array.from(sessionIds));
 			} else if (url.pathname === "/core/store-temp-file") {
 				const prefix = url.searchParams.get("prefix");
 				const folder = prefix ? `files/${prefix}` : "files";
@@ -2576,4 +2626,5 @@ export {
 	type WorkerRegistry,
 	type WorkerDefinition,
 	getDefaultDevRegistryPath,
+	getWorkerRegistry,
 } from "./shared/dev-registry";

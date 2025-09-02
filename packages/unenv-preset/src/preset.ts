@@ -6,8 +6,6 @@ import type { Preset } from "unenv";
 // https://developers.cloudflare.com/workers/runtime-apis/nodejs/
 // https://github.com/cloudflare/workerd/tree/main/src/node
 //
-// Last checked: 2025-01-24
-//
 // NOTE: Please sync any changes to `testNodeCompatModules`.
 const nativeModules = [
 	"_stream_duplex",
@@ -21,6 +19,8 @@ const nativeModules = [
 	"assert/strict",
 	"async_hooks",
 	"buffer",
+	"constants",
+	"crypto",
 	"diagnostics_channel",
 	"dns",
 	"dns/promises",
@@ -30,6 +30,7 @@ const nativeModules = [
 	"path/posix",
 	"path/win32",
 	"querystring",
+	"module",
 	"stream",
 	"stream/consumers",
 	"stream/promises",
@@ -37,13 +38,14 @@ const nativeModules = [
 	"string_decoder",
 	"timers",
 	"timers/promises",
+	"tls",
 	"url",
 	"util/types",
 	"zlib",
 ];
 
 // Modules implemented via a mix of workerd APIs and polyfills.
-const hybridModules = ["console", "crypto", "module", "process", "tls", "util"];
+const hybridModules = ["console", "process", "util"];
 
 /**
  * Creates the Cloudflare preset for the given compatibility date and compatibility flags
@@ -59,21 +61,21 @@ export function getCloudflarePreset({
 	compatibilityDate?: string;
 	compatibilityFlags?: string[];
 }): Preset {
-	const httpOverrides = getHttpOverrides({
+	const compat = {
 		compatibilityDate,
 		compatibilityFlags,
-	});
+	};
 
-	const osOverrides = getOsOverrides({
-		compatibilityDate,
-		compatibilityFlags,
-	});
+	const httpOverrides = getHttpOverrides(compat);
+	const osOverrides = getOsOverrides(compat);
+	const fsOverrides = getFsOverrides(compat);
 
 	// "dynamic" as they depend on the compatibility date and flags
 	const dynamicNativeModules = [
 		...nativeModules,
 		...httpOverrides.nativeModules,
 		...osOverrides.nativeModules,
+		...fsOverrides.nativeModules,
 	];
 
 	// "dynamic" as they depend on the compatibility date and flags
@@ -81,6 +83,7 @@ export function getCloudflarePreset({
 		...hybridModules,
 		...httpOverrides.hybridModules,
 		...osOverrides.hybridModules,
+		...fsOverrides.hybridModules,
 	];
 
 	return {
@@ -110,9 +113,6 @@ export function getCloudflarePreset({
 					[`node:${m}`, `@cloudflare/unenv-preset/node/${m}`],
 				])
 			),
-
-			// To override the npm shim from unenv
-			debug: "@cloudflare/unenv-preset/npm/debug",
 		},
 		inject: {
 			// Setting symbols implemented by workerd to `false` so that `inject`s defined in base presets are not used.
@@ -132,11 +132,12 @@ export function getCloudflarePreset({
  * Returns the overrides for node http modules (unenv or workerd)
  *
  * The native http implementation (excluding server APIs):
- * - is enabled after 2025-08-15
+ * - is enabled starting from 2025-08-15
  * - can be enabled with the "enable_nodejs_http_modules" flag
  * - can be disabled with the "disable_nodejs_http_modules" flag
  *
  * The native http server APIS implementation:
+ * - is enabled starting from 2025-09-15
  * - can be enabled with the "enable_nodejs_http_server_modules" flag
  * - can be disabled with the "disable_nodejs_http_server_modules" flag
  */
@@ -163,18 +164,20 @@ function getHttpOverrides({
 		return { nativeModules: [], hybridModules: [] };
 	}
 
-	const httpServerEnabledByFlag =
-		compatibilityFlags.includes("enable_nodejs_http_server_modules") &&
-		compatibilityFlags.includes("experimental");
+	const httpServerEnabledByFlag = compatibilityFlags.includes(
+		"enable_nodejs_http_server_modules"
+	);
 
 	const httpServerDisabledByFlag = compatibilityFlags.includes(
 		"disable_nodejs_http_server_modules"
 	);
 
+	const httpServerEnabledByDate = compatibilityDate >= "2025-09-01";
+
 	// Note that `httpServerEnabled` requires `httpEnabled`
-	// TODO: add `httpServerEnabledByDate` when a default date is set
 	const httpServerEnabled =
-		httpServerEnabledByFlag && !httpServerDisabledByFlag;
+		(httpServerEnabledByFlag || httpServerEnabledByDate) &&
+		!httpServerDisabledByFlag;
 
 	// Override unenv base aliases with native and hybrid modules
 	// `node:https` is fully implemented by workerd if both flags are enabled
@@ -194,12 +197,12 @@ function getHttpOverrides({
 /**
  * Returns the overrides for `node:os` (unenv or workerd)
  *
- * The native http implementation:
+ * The native os implementation:
+ * - is enabled starting from 2025-09-15
  * - can be enabled with the "enable_nodejs_os_module" flag
  * - can be disabled with the "disable_nodejs_os_module" flag
  */
 function getOsOverrides({
-	// eslint-disable-next-line unused-imports/no-unused-vars
 	compatibilityDate,
 	compatibilityFlags,
 }: {
@@ -210,18 +213,52 @@ function getOsOverrides({
 		"disable_nodejs_os_module"
 	);
 
-	const enabledByFlag =
-		compatibilityFlags.includes("enable_nodejs_os_module") &&
-		compatibilityFlags.includes("experimental");
+	const enabledByFlag = compatibilityFlags.includes("enable_nodejs_os_module");
+	const enabledByDate = compatibilityDate >= "2025-09-15";
 
-	// TODO: add `enabledByDate` when a default date is set
-	const enabled = enabledByFlag && !disabledByFlag;
+	const enabled = (enabledByFlag || enabledByDate) && !disabledByFlag;
 
 	// The native os module implements all the APIs.
 	// It can then be used as a native module.
 	return enabled
 		? {
 				nativeModules: ["os"],
+				hybridModules: [],
+			}
+		: {
+				nativeModules: [],
+				hybridModules: [],
+			};
+}
+
+/**
+ * Returns the overrides for `node:fs` and `node:fs/promises` (unenv or workerd)
+ *
+ * The native fs implementation:
+ * - is enabled starting from 2025-09-15
+ * - can be enabled with the "enable_nodejs_fs_module" flag
+ * - can be disabled with the "disable_nodejs_fs_module" flag
+ */
+function getFsOverrides({
+	compatibilityDate,
+	compatibilityFlags,
+}: {
+	compatibilityDate: string;
+	compatibilityFlags: string[];
+}): { nativeModules: string[]; hybridModules: string[] } {
+	const disabledByFlag = compatibilityFlags.includes(
+		"disable_nodejs_fs_module"
+	);
+
+	const enabledByFlag = compatibilityFlags.includes("enable_nodejs_fs_module");
+	const enabledByDate = compatibilityDate >= "2025-09-15";
+
+	const enabled = (enabledByFlag || enabledByDate) && !disabledByFlag;
+
+	// The native `fs` and `fs/promises` modules implement all the node APIs so we can use them directly
+	return enabled
+		? {
+				nativeModules: ["fs/promises", "fs"],
 				hybridModules: [],
 			}
 		: {

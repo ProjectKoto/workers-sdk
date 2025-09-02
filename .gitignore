@@ -232,3 +232,4 @@ dist/**
 .node-cache/
 
 packages/miniflare/package
+!vendor/jsrpc/dist

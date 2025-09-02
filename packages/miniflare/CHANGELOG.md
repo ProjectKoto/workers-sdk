@@ -1,5 +1,48 @@
 # miniflare
 
+## 4.20250823.1
+
+### Patch Changes
+
+- [#10437](https://github.com/cloudflare/workers-sdk/pull/10437) [`452ad0b`](https://github.com/cloudflare/workers-sdk/commit/452ad0b1ec58c8078084e0946bf1b3e6ab7f307f) Thanks [@dario-piotrowicz](https://github.com/dario-piotrowicz)! - Loosen validation around different configurations for Durable Object
+
+  Allow durable objects to have `enableSql`, `unsafeUniqueKey` and `unsafePreventEviction` configurations set to `undefined` even if the same durable objects are defined with those configurations set to different values (this allows workers using external durable objects not to have to duplicate such configurations in their options)
+
+## 4.20250823.0
+
+### Patch Changes
+
+- [#10410](https://github.com/cloudflare/workers-sdk/pull/10410) [`f964895`](https://github.com/cloudflare/workers-sdk/commit/f96489502c1282547b6c97af942000867e72b8e7) Thanks [@dependabot](https://github.com/apps/dependabot)! - chore: update dependencies of "miniflare" package
+
+  The following dependency versions have been updated:
+
+  | Dependency                | From          | To            |
+  | ------------------------- | ------------- | ------------- |
+  | workerd                   | 1.20250816.0  | 1.20250823.0  |
+  | @cloudflare/workers-types | ^4.20250813.0 | ^4.20250823.0 |
+
+## 4.20250816.1
+
+### Minor Changes
+
+- [#10012](https://github.com/cloudflare/workers-sdk/pull/10012) [`4728c68`](https://github.com/cloudflare/workers-sdk/commit/4728c684dad6e91748cdd3f40a216664c53ae007) Thanks [@penalosa](https://github.com/penalosa)! - Support unsafe dynamic worker loading bindings
+
+## 4.20250816.0
+
+### Minor Changes
+
+- [#10357](https://github.com/cloudflare/workers-sdk/pull/10357) [`565c3a3`](https://github.com/cloudflare/workers-sdk/commit/565c3a3ddf381945b0bea6c99029d8783e68f6bb) Thanks [@dom96](https://github.com/dom96)! - Use new default entrypoint handlers for Python examples
+
+- [#10255](https://github.com/cloudflare/workers-sdk/pull/10255) [`ddadb93`](https://github.com/cloudflare/workers-sdk/commit/ddadb9320fef96f52fe010f0e98fd75d5a2925ea) Thanks [@ruifigueira](https://github.com/ruifigueira)! - Add `/v1/session` endpoint for Browser Rendering local mode
+
+### Patch Changes
+
+- [#10249](https://github.com/cloudflare/workers-sdk/pull/10249) [`875197a`](https://github.com/cloudflare/workers-sdk/commit/875197a570edacbf1849a2f3d76c011e9b6f9cbf) Thanks [@penalosa](https://github.com/penalosa)! - Support JSRPC for remote bindings. This unlocks:
+  - JSRPC over Service Bindings
+  - JSRPC over Dispatch Namespace Bindings
+  - Email
+  - Pipelines
+
 ## 4.20250813.1
 
 ### Minor Changes

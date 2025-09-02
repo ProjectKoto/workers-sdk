@@ -1,5 +1,31 @@
 # @cloudflare/unenv-preset
 
+## 2.7.0
+
+### Minor Changes
+
+- [#10224](https://github.com/cloudflare/workers-sdk/pull/10224) [`7c339ae`](https://github.com/cloudflare/workers-sdk/commit/7c339aeb0392e41b9a306c84538950f32c9a0dd4) Thanks [@vicb](https://github.com/vicb)! - add support for native `node:fs` and `node:fs/promises`.
+
+### Patch Changes
+
+- [#10463](https://github.com/cloudflare/workers-sdk/pull/10463) [`76d9aa2`](https://github.com/cloudflare/workers-sdk/commit/76d9aa2335cb52aec3e4a86195b40002ff538022) Thanks [@vicb](https://github.com/vicb)! - Remove experimental from the `enable_nodejs_http_server_modules` flag
+
+  See [`node:http`](https://developers.cloudflare.com/workers/runtime-apis/nodejs/http/) and [`node:https`](https://developers.cloudflare.com/workers/runtime-apis/nodejs/https/) for details.
+
+## 2.6.3
+
+### Patch Changes
+
+- [#10432](https://github.com/cloudflare/workers-sdk/pull/10432) [`19e2aab`](https://github.com/cloudflare/workers-sdk/commit/19e2aab1d68594c7289d0aa16474544919fd5b9b) Thanks [@anonrig](https://github.com/anonrig)! - Remove "node:tls" polyfill
+
+## 2.6.2
+
+### Patch Changes
+
+- [#10374](https://github.com/cloudflare/workers-sdk/pull/10374) [`20520fa`](https://github.com/cloudflare/workers-sdk/commit/20520faa340005b9713007ccb8480fb6e97028d3) Thanks [@edmundhung](https://github.com/edmundhung)! - Simplify debug package resolution with nodejs_compat
+
+  A patched version of `debug` was previously introduced that resolved the package to a custom implementation. However, this caused issues due to CJS/ESM interop problems. We now resolve the `debug` package to use the Node.js implementation instead.
+
 ## 2.6.1
 
 ### Patch Changes

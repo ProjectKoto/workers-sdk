@@ -1,5 +1,96 @@
 # wrangler
 
+## 4.33.1
+
+### Patch Changes
+
+- [#10427](https://github.com/cloudflare/workers-sdk/pull/10427) [`85be2b6`](https://github.com/cloudflare/workers-sdk/commit/85be2b6a690dbe51d54b9de8ec6dfa6a64e03ac4) Thanks [@dario-piotrowicz](https://github.com/dario-piotrowicz)! - Simplify ENOENT debug logs for `.env` files
+
+- Updated dependencies [[`76d9aa2`](https://github.com/cloudflare/workers-sdk/commit/76d9aa2335cb52aec3e4a86195b40002ff538022), [`452ad0b`](https://github.com/cloudflare/workers-sdk/commit/452ad0b1ec58c8078084e0946bf1b3e6ab7f307f), [`7c339ae`](https://github.com/cloudflare/workers-sdk/commit/7c339aeb0392e41b9a306c84538950f32c9a0dd4)]:
+  - @cloudflare/unenv-preset@2.7.0
+  - miniflare@4.20250823.1
+
+## 4.33.0
+
+### Minor Changes
+
+- [#10414](https://github.com/cloudflare/workers-sdk/pull/10414) [`e81c2cf`](https://github.com/cloudflare/workers-sdk/commit/e81c2cf076a87eefd29e238476c0c180ae731a0d) Thanks [@penalosa](https://github.com/penalosa)! - Support automatically updating the user's config file with newly created resources
+
+### Patch Changes
+
+- [#10424](https://github.com/cloudflare/workers-sdk/pull/10424) [`c4fd176`](https://github.com/cloudflare/workers-sdk/commit/c4fd176a9caec0b24da258adb48f4a76f37bd9c7) Thanks [@penalosa](https://github.com/penalosa)! - Remove the `--experimental-json-config`/`-j` flag, which is no longer required.
+
+- [#10432](https://github.com/cloudflare/workers-sdk/pull/10432) [`19e2aab`](https://github.com/cloudflare/workers-sdk/commit/19e2aab1d68594c7289d0aa16474544919fd5b9b) Thanks [@anonrig](https://github.com/anonrig)! - Remove "node:tls" polyfill
+
+- [#10424](https://github.com/cloudflare/workers-sdk/pull/10424) [`c4fd176`](https://github.com/cloudflare/workers-sdk/commit/c4fd176a9caec0b24da258adb48f4a76f37bd9c7) Thanks [@penalosa](https://github.com/penalosa)! - Expose global flags from `experimental_getWranglerCommands()`
+
+- Updated dependencies [[`19e2aab`](https://github.com/cloudflare/workers-sdk/commit/19e2aab1d68594c7289d0aa16474544919fd5b9b)]:
+  - @cloudflare/unenv-preset@2.6.3
+  - miniflare@4.20250823.0
+
+## 4.32.0
+
+### Minor Changes
+
+- [#10354](https://github.com/cloudflare/workers-sdk/pull/10354) [`da40571`](https://github.com/cloudflare/workers-sdk/commit/da40571245f4276c236503ff563a27caadf02ba4) Thanks [@edmundhung](https://github.com/edmundhung)! - Enable cross-process communication for `wrangler dev` with multiple config files
+
+  Workers running in separate `wrangler dev` sessions can now communicate with each other regardless of whether you are running with single or multiple config files.
+
+  Check out the [Developing with multiple Workers](https://developers.cloudflare.com/workers/development-testing/multi-workers) guide to learn more about the different approaches and when to use each one.
+
+- [#10012](https://github.com/cloudflare/workers-sdk/pull/10012) [`4728c68`](https://github.com/cloudflare/workers-sdk/commit/4728c684dad6e91748cdd3f40a216664c53ae007) Thanks [@penalosa](https://github.com/penalosa)! - Support unsafe dynamic worker loading bindings
+
+### Patch Changes
+
+- [#10245](https://github.com/cloudflare/workers-sdk/pull/10245) [`d304055`](https://github.com/cloudflare/workers-sdk/commit/d3040550adaad031f24327fbfbe9fecdeface0b5) Thanks [@edmundhung](https://github.com/edmundhung)! - Migrate wrangler dev to use Miniflare dev registry implementation
+
+  Updated `wrangler dev` to use a shared dev registry implementation that now powers both the Cloudflare Vite plugin and Wrangler. This internal refactoring has no user-facing changes but consolidates registry logic for better consistency across tools.
+
+- [#10407](https://github.com/cloudflare/workers-sdk/pull/10407) [`f534c0d`](https://github.com/cloudflare/workers-sdk/commit/f534c0d9fd8df1c620311c4acffa6d4f0fc12576) Thanks [@emily-shen](https://github.com/emily-shen)! - default `containers.rollout_active_grace_period` to 0
+
+- [#10425](https://github.com/cloudflare/workers-sdk/pull/10425) [`0a96e69`](https://github.com/cloudflare/workers-sdk/commit/0a96e6949cf0097a2b315d44a6262017bb4129a3) Thanks [@dario-piotrowicz](https://github.com/dario-piotrowicz)! - Fix debugging logs not including headers for CF API requests and responses
+
+  Fix the fact that `wrangler`, when run with the `WRANGLER_LOG=DEBUG` and `WRANGLER_LOG_SANITIZE=false` environment variables, displays `{}` instead of the actual headers for requests and responses for CF API fetches
+
+- [#10337](https://github.com/cloudflare/workers-sdk/pull/10337) [`f9f7519`](https://github.com/cloudflare/workers-sdk/commit/f9f75195f8b2aa28bc297cb04e6fd4e4195a1300) Thanks [@emily-shen](https://github.com/emily-shen)! - containers: `rollout_step_percentage` now also accepts an array of numbers. Previously it accepted a single number, and each rollout step would target the same percentage of instances. Now users can customise percentages for each step.
+
+  `rollout_step_percentage` also now defaults to `[10,100]` (previously `25`), which should make rollouts progress slightly faster.
+
+  You can also use `wrangler deploy --containers-rollout=immediate` to override rollout settings in Wrangler configuration and update all instances in one step. Note this doesn't override `rollout_active_grace_period` if configured.
+
+- Updated dependencies [[`4728c68`](https://github.com/cloudflare/workers-sdk/commit/4728c684dad6e91748cdd3f40a216664c53ae007)]:
+  - miniflare@4.20250816.1
+
+## 4.31.0
+
+### Minor Changes
+
+- [#10314](https://github.com/cloudflare/workers-sdk/pull/10314) [`9b09751`](https://github.com/cloudflare/workers-sdk/commit/9b097518456fecee5eb0fab1f56d3a269e8bdfc5) Thanks [@dario-piotrowicz](https://github.com/dario-piotrowicz)! - Show possible local vs. dashboard diff information on deploys
+
+  When re-deploying a Worker using `wrangler deploy`, if the configuration has been modified in the Cloudflare dashboard, the local configuration will overwrite the remote one. This can lead to unexpected results for users. To address this, currently `wrangler deploy` warns users about potential configuration overrides (without presenting them) and prompts them to confirm whether they want to proceed.
+
+  The changes here improve the above flow in the following way:
+
+  - If the local changes only add new configurations (without modifying or removing existing ones), the deployment proceeds automatically without warnings or prompts, as these changes are non-destructive and safe.
+  - If the local changes modify or remove existing configurations, `wrangler deploy` now displays a git-like diff showing the differences between the dashboard and local configurations. This allows users to review and understand the impact of their changes before confirming the deployment.
+
+- [#10334](https://github.com/cloudflare/workers-sdk/pull/10334) [`cadf19a`](https://github.com/cloudflare/workers-sdk/commit/cadf19ad1050627ab0b0e107c9533657e01c178d) Thanks [@jonesphillip](https://github.com/jonesphillip)! - Added queues subscription command to Wrangler including create, update, delete, get, list
+
+### Patch Changes
+
+- [#10374](https://github.com/cloudflare/workers-sdk/pull/10374) [`20520fa`](https://github.com/cloudflare/workers-sdk/commit/20520faa340005b9713007ccb8480fb6e97028d3) Thanks [@edmundhung](https://github.com/edmundhung)! - Simplify debug package resolution with nodejs_compat
+
+  A patched version of `debug` was previously introduced that resolved the package to a custom implementation. However, this caused issues due to CJS/ESM interop problems. We now resolve the `debug` package to use the Node.js implementation instead.
+
+- [#10249](https://github.com/cloudflare/workers-sdk/pull/10249) [`875197a`](https://github.com/cloudflare/workers-sdk/commit/875197a570edacbf1849a2f3d76c011e9b6f9cbf) Thanks [@penalosa](https://github.com/penalosa)! - Support JSRPC for remote bindings. This unlocks:
+  - JSRPC over Service Bindings
+  - JSRPC over Dispatch Namespace Bindings
+  - Email
+  - Pipelines
+- Updated dependencies [[`565c3a3`](https://github.com/cloudflare/workers-sdk/commit/565c3a3ddf381945b0bea6c99029d8783e68f6bb), [`ddadb93`](https://github.com/cloudflare/workers-sdk/commit/ddadb9320fef96f52fe010f0e98fd75d5a2925ea), [`20520fa`](https://github.com/cloudflare/workers-sdk/commit/20520faa340005b9713007ccb8480fb6e97028d3), [`875197a`](https://github.com/cloudflare/workers-sdk/commit/875197a570edacbf1849a2f3d76c011e9b6f9cbf)]:
+  - miniflare@4.20250816.0
+  - @cloudflare/unenv-preset@2.6.2
+
 ## 4.30.0
 
 ### Minor Changes

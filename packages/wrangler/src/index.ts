@@ -68,15 +68,6 @@ import {
 	UserError,
 } from "./errors";
 import {
-	eventSubscriptionsBrowseCommand,
-	eventSubscriptionsCreateCommand,
-	eventSubscriptionsDeleteCommand,
-	eventSubscriptionsGetCommand,
-	eventSubscriptionsListCommand,
-	eventSubscriptionsNamespace,
-	eventSubscriptionsUpdateCommand,
-} from "./event-subscriptions";
-import {
 	helloWorldGetCommand,
 	helloWorldNamespace,
 	helloWorldSetCommand,
@@ -179,6 +170,12 @@ import {
 	queuesResumeCommand,
 } from "./queues/cli/commands/pause-resume";
 import { queuesPurgeCommand } from "./queues/cli/commands/purge";
+import { queuesSubscriptionNamespace } from "./queues/cli/commands/subscription";
+import { queuesSubscriptionCreateCommand } from "./queues/cli/commands/subscription/create";
+import { queuesSubscriptionDeleteCommand } from "./queues/cli/commands/subscription/delete";
+import { queuesSubscriptionGetCommand } from "./queues/cli/commands/subscription/get";
+import { queuesSubscriptionListCommand } from "./queues/cli/commands/subscription/list";
+import { queuesSubscriptionUpdateCommand } from "./queues/cli/commands/subscription/update";
 import { queuesUpdateCommand } from "./queues/cli/commands/update";
 import { r2Namespace } from "./r2";
 import {
@@ -341,6 +338,51 @@ if (proxy) {
 }
 
 export function createCLIParser(argv: string[]) {
+	const globalFlags = {
+		v: {
+			describe: "Show version number",
+			alias: "version",
+			type: "boolean",
+		},
+		cwd: {
+			describe:
+				"Run as if Wrangler was started in the specified directory instead of the current working directory",
+			type: "string",
+			requiresArg: true,
+		},
+		config: {
+			alias: "c",
+			describe: "Path to Wrangler configuration file",
+			type: "string",
+			requiresArg: true,
+		},
+		env: {
+			alias: "e",
+			describe:
+				"Environment to use for operations, and for selecting .env and .dev.vars files",
+			type: "string",
+			requiresArg: true,
+		},
+		"env-file": {
+			describe:
+				"Path to an .env file to load - can be specified multiple times - values from earlier files are overridden by values in later files",
+			type: "string",
+			array: true,
+			requiresArg: true,
+		},
+		"experimental-remote-bindings": {
+			describe: `Experimental: Enable Remote Bindings`,
+			type: "boolean",
+			hidden: true,
+			alias: ["x-remote-bindings"],
+		},
+		"experimental-provision": {
+			describe: `Experimental: Enable automatic resource provisioning`,
+			type: "boolean",
+			hidden: true,
+			alias: ["x-provision"],
+		},
+	} as const;
 	// Type check result against CommonYargsOptions to make sure we've included
 	// all common options
 	const wrangler: CommonYargsArgv = makeCLI(argv)
@@ -365,28 +407,12 @@ export function createCLIParser(argv: string[]) {
 		// Define global options here, so they get included in the `Argv` type of
 		// the `wrangler` variable
 		.version(false)
-		.option("v", {
-			describe: "Show version number",
-			alias: "version",
-			type: "boolean",
-		})
-		.option("cwd", {
-			describe:
-				"Run as if Wrangler was started in the specified directory instead of the current working directory",
-			type: "string",
-			requiresArg: true,
-		})
+		.options(globalFlags)
 		.check(demandSingleValue("cwd"))
 		.middleware((_argv) => {
 			if (_argv.cwd) {
 				process.chdir(_argv.cwd);
 			}
-		})
-		.option("config", {
-			alias: "c",
-			describe: "Path to Wrangler configuration file",
-			type: "string",
-			requiresArg: true,
 		})
 		.check(
 			demandSingleValue(
@@ -397,38 +423,7 @@ export function createCLIParser(argv: string[]) {
 					(configArgv["_"][0] === "pages" && configArgv["_"][1] === "dev")
 			)
 		)
-		.option("env", {
-			alias: "e",
-			describe:
-				"Environment to use for operations, and for selecting .env and .dev.vars files",
-			type: "string",
-			requiresArg: true,
-		})
-		.option("env-file", {
-			describe:
-				"Path to an .env file to load - can be specified multiple times - values from earlier files are overridden by values in later files",
-			type: "string",
-			array: true,
-			requiresArg: true,
-		})
 		.check(demandSingleValue("env"))
-		.option("experimental-json-config", {
-			alias: "j",
-			describe: `Support wrangler.json.`,
-			type: "boolean",
-			default: true,
-			deprecated: true,
-			hidden: true,
-		})
-		.check((args) => {
-			if (args["experimental-json-config"] === false) {
-				throw new CommandLineArgsError(
-					`Wrangler now supports wrangler.json configuration files by default and ignores the value of the \`--experimental-json-config\` flag.`,
-					{ telemetryMessage: true }
-				);
-			}
-			return true;
-		})
 		.check((args) => {
 			// Set process environment params from `.env` files if available.
 			const resolvedEnvFilePaths = (
@@ -449,18 +444,6 @@ export function createCLIParser(argv: string[]) {
 			});
 
 			return true;
-		})
-		.option("experimental-remote-bindings", {
-			describe: `Experimental: Enable Remote Bindings`,
-			type: "boolean",
-			hidden: true,
-			alias: ["x-remote-bindings"],
-		})
-		.option("experimental-provision", {
-			describe: `Experimental: Enable automatic resource provisioning`,
-			type: "boolean",
-			hidden: true,
-			alias: ["x-provision"],
 		})
 		.epilogue(
 			`Please report any issues to ${chalk.hex("#3B818D")(
@@ -717,6 +700,30 @@ export function createCLIParser(argv: string[]) {
 			command: "wrangler queues purge",
 			definition: queuesPurgeCommand,
 		},
+		{
+			command: "wrangler queues subscription",
+			definition: queuesSubscriptionNamespace,
+		},
+		{
+			command: "wrangler queues subscription create",
+			definition: queuesSubscriptionCreateCommand,
+		},
+		{
+			command: "wrangler queues subscription list",
+			definition: queuesSubscriptionListCommand,
+		},
+		{
+			command: "wrangler queues subscription get",
+			definition: queuesSubscriptionGetCommand,
+		},
+		{
+			command: "wrangler queues subscription delete",
+			definition: queuesSubscriptionDeleteCommand,
+		},
+		{
+			command: "wrangler queues subscription update",
+			definition: queuesSubscriptionUpdateCommand,
+		},
 
 		{
 			command: "wrangler queues consumer add",
@@ -752,38 +759,6 @@ export function createCLIParser(argv: string[]) {
 		},
 	]);
 	registry.registerNamespace("queues");
-
-	registry.define([
-		{
-			command: "wrangler event-subscriptions",
-			definition: eventSubscriptionsNamespace,
-		},
-		{
-			command: "wrangler event-subscriptions browse",
-			definition: eventSubscriptionsBrowseCommand,
-		},
-		{
-			command: "wrangler event-subscriptions list",
-			definition: eventSubscriptionsListCommand,
-		},
-		{
-			command: "wrangler event-subscriptions create",
-			definition: eventSubscriptionsCreateCommand,
-		},
-		{
-			command: "wrangler event-subscriptions update",
-			definition: eventSubscriptionsUpdateCommand,
-		},
-		{
-			command: "wrangler event-subscriptions delete",
-			definition: eventSubscriptionsDeleteCommand,
-		},
-		{
-			command: "wrangler event-subscriptions get",
-			definition: eventSubscriptionsGetCommand,
-		},
-	]);
-	registry.registerNamespace("event-subscriptions");
 
 	// r2
 	registry.define([
@@ -1488,7 +1463,7 @@ export function createCLIParser(argv: string[]) {
 
 	wrangler.exitProcess(false);
 
-	return { wrangler, registry };
+	return { wrangler, registry, globalFlags };
 }
 
 export async function main(argv: string[]): Promise<void> {

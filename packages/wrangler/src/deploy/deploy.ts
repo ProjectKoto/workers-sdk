@@ -28,6 +28,7 @@ import { getMigrationsToUpload } from "../durable";
 import { getDockerPath } from "../environment-variables/misc-variables";
 import { UserError } from "../errors";
 import { getFlag } from "../experimental-flags";
+import { downloadWorkerConfig } from "../init";
 import { logger } from "../logger";
 import { getMetricsUsageHeaders } from "../metrics";
 import { isNavigatorDefined } from "../navigator-user-agent";
@@ -56,6 +57,7 @@ import {
 } from "../versions/api";
 import { confirmLatestDeploymentOverwrite } from "../versions/deploy";
 import { getZoneForRoute } from "../zones";
+import { getRemoteConfigDiff } from "./config-diffs";
 import type { AssetsOptions } from "../assets";
 import type { Config } from "../config";
 import type {
@@ -112,6 +114,7 @@ type Props = {
 	dispatchNamespace: string | undefined;
 	experimentalAutoCreate: boolean;
 	metafile: string | boolean | undefined;
+	containersRollout: "immediate" | "gradual" | undefined;
 };
 
 export type RouteObject = ZoneIdRoute | ZoneNameRoute | CustomDomainRoute;
@@ -350,16 +353,25 @@ export default async function deploy(props: Props): Promise<{
 	targets?: string[];
 }> {
 	// TODO: warn if git/hg has uncommitted changes
-	const { config, accountId, name } = props;
+	const { config, accountId, name, entry } = props;
 	let workerTag: string | null = null;
 	let versionId: string | null = null;
 
 	let workerExists: boolean = true;
 
+	const domainRoutes = (props.domains || []).map((domain) => ({
+		pattern: domain,
+		custom_domain: true,
+	}));
+	const routes =
+		props.routes ?? config.routes ?? (config.route ? [config.route] : []) ?? [];
+	const allDeploymentRoutes = [...routes, ...domainRoutes];
+
 	if (!props.dispatchNamespace && accountId) {
 		try {
 			const serviceMetaData = await fetchResult<{
 				default_environment: {
+					environment: string;
 					script: {
 						tag: string;
 						last_deployed_from: "dash" | "wrangler" | "api";
@@ -372,11 +384,42 @@ export default async function deploy(props: Props): Promise<{
 			workerTag = script.tag;
 
 			if (script.last_deployed_from === "dash") {
-				logger.warn(
-					`You are about to publish a Workers Service that was last published via the Cloudflare Dashboard.\nEdits that have been made via the dashboard will be overridden by your local code and config.`
-				);
-				if (!(await confirm("Would you like to continue?"))) {
-					return { versionId, workerTag };
+				let configDiff: ReturnType<typeof getRemoteConfigDiff> | undefined;
+				if (getFlag("DEPLOY_REMOTE_DIFF_CHECK")) {
+					const remoteWorkerConfig = await downloadWorkerConfig(
+						accountId,
+						name,
+						entry.file,
+						serviceMetaData.default_environment.environment
+					);
+
+					configDiff = getRemoteConfigDiff(remoteWorkerConfig, {
+						...config,
+						// We also want to include all the routes used for deployment
+						routes: allDeploymentRoutes,
+					});
+				}
+
+				if (configDiff) {
+					// If there are only additive changes (or no changes at all) there should be no problem,
+					// just using the local config (and override the remote one) should be totally fine
+					if (!configDiff.nonDestructive) {
+						logger.warn(
+							"The local configuration being used (generated from your local configuration file) differs from the remote configuration of your Worker set via the Cloudflare Dashboard:" +
+								`\n${configDiff.diff}\n\n` +
+								"Deploying the Worker will override the remote configuration with your local one."
+						);
+						if (!(await confirm("Would you like to continue?"))) {
+							return { versionId, workerTag };
+						}
+					}
+				} else {
+					logger.warn(
+						`You are about to publish a Workers Service that was last published via the Cloudflare Dashboard.\nEdits that have been made via the dashboard will be overridden by your local code and config.`
+					);
+					if (!(await confirm("Would you like to continue?"))) {
+						return { versionId, workerTag };
+					}
 				}
 			} else if (script.last_deployed_from === "api") {
 				logger.warn(
@@ -416,14 +459,7 @@ See https://developers.cloudflare.com/workers/platform/compatibility-dates for m
 		);
 	}
 
-	const domainRoutes = (props.domains || []).map((domain) => ({
-		pattern: domain,
-		custom_domain: true,
-	}));
-	const routes =
-		props.routes ?? config.routes ?? (config.route ? [config.route] : []) ?? [];
-	const allRoutes = [...routes, ...domainRoutes];
-	validateRoutes(allRoutes, props.assetsOptions);
+	validateRoutes(allDeploymentRoutes, props.assetsOptions);
 
 	const jsxFactory = props.jsxFactory || config.jsx_factory;
 	const jsxFragment = props.jsxFragment || config.jsx_fragment;
@@ -526,7 +562,10 @@ See https://developers.cloudflare.com/workers/platform/compatibility-dates for m
 	}
 
 	let sourceMapSize;
-	const normalisedContainerConfig = await getNormalizedContainerOptions(config);
+	const normalisedContainerConfig = await getNormalizedContainerOptions(
+		config,
+		props
+	);
 	try {
 		if (props.noBundle) {
 			// if we're not building, let's just copy the entry to the destination directory
@@ -1059,7 +1098,7 @@ See https://developers.cloudflare.com/workers/platform/compatibility-dates for m
 	// deploy triggers
 	const targets = await triggersDeploy({
 		...props,
-		routes: allRoutes,
+		routes: allDeploymentRoutes,
 	});
 
 	logger.log("Current Version ID:", versionId);

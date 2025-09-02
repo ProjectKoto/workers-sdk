@@ -21,7 +21,12 @@ import type {
  * we want to revert to the default rather than inheriting from the prev deployment
  */
 export const getNormalizedContainerOptions = async (
-	config: Config
+	config: Config,
+	args: {
+		/** set by args.containersRollout */
+		containersRollout?: "gradual" | "immediate";
+		dryRun?: boolean;
+	}
 ): Promise<ContainerNormalizedConfig[]> => {
 	if (!config.containers || config.containers.length === 0) {
 		return [];
@@ -51,6 +56,9 @@ export const getNormalizedContainerOptions = async (
 			);
 		}
 
+		const rolloutStepPercentageFallback =
+			(container.max_instances ?? 0) < 2 ? 100 : [10, 100];
+
 		const shared: Omit<SharedContainerConfig, "disk_size" | "instance_type"> = {
 			name: container.name,
 			class_name: container.class_name,
@@ -72,9 +80,12 @@ export const getNormalizedContainerOptions = async (
 					city.toLowerCase()
 				),
 			},
-			rollout_step_percentage: container.rollout_step_percentage ?? 25,
+			rollout_step_percentage:
+				args?.containersRollout === "immediate"
+					? 100
+					: container.rollout_step_percentage ?? rolloutStepPercentageFallback,
 			rollout_kind: container.rollout_kind ?? "full_auto",
-			rollout_active_grace_period: container.rollout_active_grace_period,
+			rollout_active_grace_period: container.rollout_active_grace_period ?? 0,
 			observability: {
 				logs_enabled:
 					config.observability?.logs?.enabled ??
@@ -135,11 +146,12 @@ export const getNormalizedContainerOptions = async (
 				image_vars: container.image_vars,
 			});
 		} else {
-			const accountId = await getAccountId(config);
 			normalizedContainers.push({
 				...shared,
 				...instanceTypeOrLimits,
-				image_uri: resolveImageName(accountId, container.image), // if it is not a dockerfile, it must be an image uri or have thrown an error
+				image_uri: args.dryRun
+					? container.image
+					: resolveImageName(await getAccountId(config), container.image), // if it is not a dockerfile, it must be an image uri or have thrown an error
 			});
 		}
 	}

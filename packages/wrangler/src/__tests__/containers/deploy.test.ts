@@ -119,6 +119,7 @@ describe("wrangler deploy with containers", () => {
 			│   scheduling_policy = \\"default\\"
 			│   instances = 0
 			│   max_instances = 10
+			│   rollout_active_grace_period = 0
 			│
 			│     [containers.configuration]
 			│     image = \\"registry.cloudflare.com/some-account-id/my-container:Galaxy\\"
@@ -279,6 +280,7 @@ describe("wrangler deploy with containers", () => {
 			│   scheduling_policy = \\"default\\"
 			│   instances = 0
 			│   max_instances = 10
+			│   rollout_active_grace_period = 0
 			│
 			│     [containers.configuration]
 			│     image = \\"docker.io/hello:world\\"
@@ -367,6 +369,7 @@ describe("wrangler deploy with containers", () => {
 			│   scheduling_policy = \\"default\\"
 			│   instances = 0
 			│   max_instances = 10
+			│   rollout_active_grace_period = 0
 			│
 			│     [containers.configuration]
 			│     image = \\"docker.io/hello:world\\"
@@ -587,12 +590,10 @@ describe("wrangler deploy with containers", () => {
 			│ - rollout_active_grace_period = 500
 			│ + rollout_active_grace_period = 600
 			│   scheduling_policy = \\"default\\"
-			│
 			│     [containers.configuration]
 			│ -   image = \\"registry.cloudflare.com/some-account-id/my-container:old\\"
 			│ +   image = \\"registry.cloudflare.com/some-account-id/my-container:Galaxy\\"
 			│     instance_type = \\"dev\\"
-			│
 			│     [containers.constraints]
 			│
 			│
@@ -676,6 +677,7 @@ describe("wrangler deploy with containers", () => {
 				version: 1,
 				account_id: "1",
 				scheduling_policy: SchedulingPolicy.DEFAULT,
+				rollout_active_grace_period: 0,
 				configuration: {
 					image: "registry.cloudflare.com/some-account-id/my-container:old",
 					disk: {
@@ -727,13 +729,12 @@ describe("wrangler deploy with containers", () => {
 			│ - max_instances = 2
 			│ + max_instances = 10
 			│   name = \\"my-container\\"
+			│   rollout_active_grace_period = 0
 			│   scheduling_policy = \\"default\\"
-			│
 			│     [containers.configuration]
 			│ -   image = \\"registry.cloudflare.com/some-account-id/my-container:old\\"
 			│ +   image = \\"registry.cloudflare.com/some-account-id/my-container:Galaxy\\"
 			│     instance_type = \\"dev\\"
-			│
 			│     [containers.constraints]
 			│
 			│
@@ -752,6 +753,7 @@ describe("wrangler deploy with containers", () => {
 			│   scheduling_policy = \\"default\\"
 			│   instances = 0
 			│   max_instances = 3
+			│   rollout_active_grace_period = 0
 			│
 			│     [containers.configuration]
 			│     image = \\"docker.io/hello:world\\"
@@ -788,6 +790,7 @@ describe("wrangler deploy with containers", () => {
 				version: 1,
 				account_id: "1",
 				scheduling_policy: SchedulingPolicy.DEFAULT,
+				rollout_active_grace_period: 0,
 				configuration: {
 					image: "registry.cloudflare.com/some-account-id/my-container:Galaxy",
 					disk: {
@@ -840,6 +843,177 @@ describe("wrangler deploy with containers", () => {
 		);
 	});
 
+	describe("rollout_percentage_steps", () => {
+		it("should create rollout with *step_percentage* when rollout_step_percentage is a number", async () => {
+			writeWranglerConfig({
+				...DEFAULT_DURABLE_OBJECTS,
+				containers: [
+					{
+						...DEFAULT_CONTAINER_FROM_REGISTRY,
+						rollout_step_percentage: 50,
+					},
+				],
+			});
+
+			mockGetVersion("Galaxy-Class");
+
+			mockGetApplications([]);
+
+			mockCreateApplication();
+
+			mockCreateApplicationRollout({
+				description: "Progressive update",
+				strategy: "rolling",
+				kind: "full_auto",
+				step_percentage: 50,
+			});
+
+			fs.writeFileSync(
+				"index.js",
+				`export class ExampleDurableObject {}; export default{};`
+			);
+			await runWrangler("deploy index.js");
+
+			expect(std.err).toMatchInlineSnapshot(`""`);
+		});
+
+		it("should create rollout with *steps* when rollout_step_percentage is an array of numbers", async () => {
+			writeWranglerConfig({
+				...DEFAULT_DURABLE_OBJECTS,
+				containers: [
+					{
+						...DEFAULT_CONTAINER_FROM_REGISTRY,
+						rollout_step_percentage: [20, 30, 100],
+					},
+				],
+			});
+
+			mockGetVersion("Galaxy-Class");
+
+			mockGetApplications([
+				{
+					id: "abc",
+					name: "my-container",
+					instances: 0,
+					max_instances: 2,
+					created_at: new Date().toString(),
+					version: 1,
+					account_id: "1",
+					scheduling_policy: SchedulingPolicy.DEFAULT,
+					configuration: {
+						image: "registry.cloudflare.com/some-account-id/my-container:old",
+						disk: {
+							size: "2GB",
+							size_mb: 2000,
+						},
+						vcpu: 0.0625,
+						memory: "256MB",
+						memory_mib: 256,
+					},
+					constraints: {
+						tier: 1,
+					},
+					durable_objects: {
+						namespace_id: "1",
+					},
+				},
+			]);
+
+			mockModifyApplication();
+
+			mockCreateApplicationRollout({
+				description: "Progressive update",
+				strategy: "rolling",
+				kind: "full_auto",
+				steps: [
+					{
+						step_size: { percentage: 20 },
+						description: "Step 1 of 3 - rollout at 20% of instances",
+					},
+					{
+						step_size: { percentage: 30 },
+						description: "Step 2 of 3 - rollout at 30% of instances",
+					},
+					{
+						step_size: { percentage: 100 },
+						description: "Step 3 of 3 - rollout at 100% of instances",
+					},
+				],
+			});
+			await runWrangler("deploy index.js");
+
+			expect(std.err).toMatchInlineSnapshot(`""`);
+		});
+
+		it("should override rollout to 100 if deploying with --containers-rollout=immediate ", async () => {
+			writeWranglerConfig({
+				...DEFAULT_DURABLE_OBJECTS,
+				containers: [
+					{
+						...DEFAULT_CONTAINER_FROM_REGISTRY,
+						rollout_step_percentage: [50, 100],
+					},
+				],
+			});
+
+			mockGetVersion("Galaxy-Class");
+
+			mockGetApplications([]);
+
+			mockCreateApplication();
+
+			// expect to see 100
+			mockCreateApplicationRollout({
+				description: "Progressive update",
+				strategy: "rolling",
+				kind: "full_auto",
+				step_percentage: 100,
+			});
+
+			fs.writeFileSync(
+				"index.js",
+				`export class ExampleDurableObject {}; export default{};`
+			);
+			await runWrangler("deploy index.js --containers-rollout=immediate");
+
+			expect(std.err).toMatchInlineSnapshot(`""`);
+		});
+
+		it("deploying with --containers-rollout=rolling should pass through the config value of rollout_step_percentage", async () => {
+			writeWranglerConfig({
+				...DEFAULT_DURABLE_OBJECTS,
+				containers: [
+					{
+						...DEFAULT_CONTAINER_FROM_REGISTRY,
+						rollout_step_percentage: [50, 100],
+					},
+				],
+			});
+
+			mockGetVersion("Galaxy-Class");
+
+			mockGetApplications([]);
+
+			mockCreateApplication();
+
+			// expect to see 100
+			mockCreateApplicationRollout({
+				description: "Progressive update",
+				strategy: "rolling",
+				kind: "full_auto",
+				step_percentage: [50, 100],
+			});
+
+			fs.writeFileSync(
+				"index.js",
+				`export class ExampleDurableObject {}; export default{};`
+			);
+			await runWrangler("deploy index.js --containers-rollout=gradual");
+
+			expect(std.err).toMatchInlineSnapshot(`""`);
+		});
+	});
+
 	describe("observability config resolution", () => {
 		const sharedGetApplicationResult = {
 			id: "abc",
@@ -850,6 +1024,7 @@ describe("wrangler deploy with containers", () => {
 			version: 1,
 			account_id: "1",
 			scheduling_policy: SchedulingPolicy.DEFAULT,
+			rollout_active_grace_period: 0,
 			configuration: {
 				image: "docker.io/hello:world",
 				disk: {
@@ -896,11 +1071,8 @@ describe("wrangler deploy with containers", () => {
 				│
 				│     image = \\"docker.io/hello:world\\"
 				│     instance_type = \\"dev\\"
-				│
 				│ + [containers.configuration.observability.logs]
 				│ + enabled = true
-				│ +
-				│ +
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -942,11 +1114,8 @@ describe("wrangler deploy with containers", () => {
 				│
 				│     image = \\"docker.io/hello:world\\"
 				│     instance_type = \\"dev\\"
-				│
 				│ + [containers.configuration.observability.logs]
 				│ + enabled = true
-				│ +
-				│ +
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -1000,11 +1169,9 @@ describe("wrangler deploy with containers", () => {
 				├ EDIT my-container
 				│
 				│     instance_type = \\"dev\\"
-				│
 				│   [containers.configuration.observability.logs]
 				│ - enabled = true
 				│ + enabled = false
-				│
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -1058,11 +1225,9 @@ describe("wrangler deploy with containers", () => {
 				├ EDIT my-container
 				│
 				│     instance_type = \\"dev\\"
-				│
 				│   [containers.configuration.observability.logs]
 				│ - enabled = true
 				│ + enabled = false
-				│
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -1112,11 +1277,9 @@ describe("wrangler deploy with containers", () => {
 				├ EDIT my-container
 				│
 				│     instance_type = \\"dev\\"
-				│
 				│   [containers.configuration.observability.logs]
 				│ - enabled = true
 				│ + enabled = false
-				│
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -1171,11 +1334,9 @@ describe("wrangler deploy with containers", () => {
 				├ EDIT my-container
 				│
 				│     instance_type = \\"dev\\"
-				│
 				│   [containers.configuration.observability.logs]
 				│ - enabled = true
 				│ + enabled = false
-				│
 				│     [containers.constraints]
 				│     tier = 1
 				│
@@ -1316,6 +1477,7 @@ describe("wrangler deploy with containers", () => {
 			│   scheduling_policy = \\"default\\"
 			│   instances = 0
 			│   max_instances = 10
+			│   rollout_active_grace_period = 0
 			│
 			│     [containers.configuration]
 			│     image = \\"registry.cloudflare.com/some-account-id/hello:1.0\\"
@@ -1346,6 +1508,7 @@ describe("wrangler deploy with containers dry run", () => {
 	const cliStd = mockCLIOutput();
 	beforeEach(() => {
 		clearCachedAccount();
+		expect(process.env.CLOUDFLARE_API_TOKEN).toBeUndefined();
 	});
 
 	afterEach(() => {
@@ -1353,18 +1516,12 @@ describe("wrangler deploy with containers dry run", () => {
 	});
 
 	it("builds the image without pushing", async () => {
-		// Reduced mock chain for dry run (no delete, modified push)
+		// Reduced mock chain for dry run (no delete, push)
 		vi.mocked(spawn)
 			.mockImplementationOnce(mockDockerInfo())
 			.mockImplementationOnce(
 				mockDockerBuild("my-container", "worker", "FROM scratch", process.cwd())
-			)
-			.mockImplementationOnce(
-				mockDockerImageInspectDigests("my-container", "worker")
-			)
-			.mockImplementationOnce(mockDockerLogin("mockpassword"))
-			.mockImplementationOnce(mockDockerPush("my-container", "worker"));
-
+			);
 		vi.stubEnv("WRANGLER_DOCKER_BIN", "/usr/bin/docker");
 		fs.writeFileSync("./Dockerfile", "FROM scratch");
 		fs.writeFileSync(
@@ -1380,6 +1537,30 @@ describe("wrangler deploy with containers dry run", () => {
 		expect(std.out).toMatchInlineSnapshot(`
 			"Total Upload: xx KiB / gzip: xx KiB
 			Building image my-container:worker
+			Your Worker has access to the following bindings:
+			Binding                                            Resource
+			env.EXAMPLE_DO_BINDING (ExampleDurableObject)      Durable Object
+
+			--dry-run: exiting now."
+		`);
+		expect(cliStd.stdout).toMatchInlineSnapshot(`""`);
+	});
+
+	it("builds the image without pushing", async () => {
+		// No docker mocks at all
+
+		fs.writeFileSync(
+			"index.js",
+			`export class ExampleDurableObject {}; export default{};`
+		);
+		writeWranglerConfig({
+			...DEFAULT_DURABLE_OBJECTS,
+			containers: [DEFAULT_CONTAINER_FROM_REGISTRY],
+		});
+
+		await runWrangler("deploy --dry-run index.js");
+		expect(std.out).toMatchInlineSnapshot(`
+			"Total Upload: xx KiB / gzip: xx KiB
 			Your Worker has access to the following bindings:
 			Binding                                            Resource
 			env.EXAMPLE_DO_BINDING (ExampleDurableObject)      Durable Object
@@ -1540,7 +1721,6 @@ function mockCreateApplication(expected?: Partial<Application>) {
 	msw.use(
 		http.post("*/applications", async ({ request }) => {
 			const json = await request.json();
-
 			if (expected !== undefined) {
 				expect(json).toMatchObject(expected);
 			}
@@ -1574,6 +1754,8 @@ function mockCreateApplicationRollout(expected?: Record<string, unknown>) {
 	msw.use(
 		http.post("*/applications/:id/rollouts", async ({ request }) => {
 			const json = await request.json();
+			console.dir(json);
+			console.dir(expected);
 			if (expected !== undefined) {
 				expect(json).toMatchObject(expected);
 			}
